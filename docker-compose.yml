@@ -1,0 +1,49 @@
+services:
+  app:
+    build:
+      args:
+        user: laravel
+        uid: 1000
+      context: ./
+      dockerfile: Dockerfile
+    image: loan-management-app
+    container_name: loan-management-app
+    restart: unless-stopped
+    working_dir: /var/www/
+    volumes:
+      - ./:/var/www
+    networks:
+      - loan-network
+
+  db:
+    image: mysql:8.0
+    container_name: loan-management-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - loan-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: loan-management-nginx
+    restart: unless-stopped
+    ports:
+      - 80:80
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
+    networks:
+      - loan-network
+
+networks:
+  loan-network:
+    driver: bridge
+
+volumes:
+  db_data:
