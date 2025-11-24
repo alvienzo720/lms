@@ -23,6 +23,10 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Exports\LoanExporter;
 use Filament\Tables\Actions\ExportAction;
 use Filament\Forms\Components\Hidden;
+use App\Services\RepaymentScheduleService;
+use App\Helpers\CurrencyHelper;
+use Filament\Tables\Actions\Action;
+use Filament\Support\Enums\MaxWidth;
 
 class LoanResource extends Resource
 {
@@ -58,17 +62,16 @@ class LoanResource extends Resource
                     ->live()
                     ->afterStateUpdated(function ($state, Set $set, Get $get) {
                         if ($state) {
-                            $interest_cycle = \App\Models\LoanType::findOrFail($state)->first();
-                            $set('duration_period', $interest_cycle->interest_cycle);
+                            $loanType = \App\Models\LoanType::findOrFail($state);
+                            $set('duration_period', $loanType->interest_cycle);
 
                             $service_fee = 0.00;
-                            $service_fee_data = \App\Models\LoanType::findOrFail($state);
 
-                            if ($service_fee_data->service_fee_type === 'service_fee_percentage') {
-                                $service_fee = ($get('principal_amount') * $service_fee_data->service_fee_percentage) / 100;
-                            } elseif ($service_fee_data->service_fee_type === 'service_fee_custom_amount') {
-                                $service_fee = $service_fee_data->service_fee_custom_amount;
-                            } elseif ($service_fee_data->service_fee_type === 'none') {
+                            if ($loanType->service_fee_type === 'service_fee_percentage') {
+                                $service_fee = ($get('principal_amount') * $loanType->service_fee_percentage) / 100;
+                            } elseif ($loanType->service_fee_type === 'service_fee_custom_amount') {
+                                $service_fee = $loanType->service_fee_custom_amount;
+                            } elseif ($loanType->service_fee_type === 'none') {
                                 $service_fee = 0;
                             } else {
                                 $service_fee = 0;
@@ -77,7 +80,7 @@ class LoanResource extends Resource
                             $duration = $get('loan_duration') ?? 0;
                             $principle_amount = $get('principal_amount') ?? 0;
                             $disbursement_amount = ($principle_amount -  $service_fee) < 0 ? 0.00 : $principle_amount -  $service_fee;
-                            $loan_percent = \App\Models\LoanType::findOrFail($state)->interest_rate ?? 0;
+                            $loan_percent = $loanType->interest_rate ?? 0;
                             $interest_amount = (($principle_amount) * ($loan_percent / 100) * $duration);
                             $total_repayment = ($principle_amount) + (($principle_amount) * ($loan_percent / 100) * $duration);
                             $set('repayment_amount', number_format($total_repayment));
@@ -417,6 +420,44 @@ class LoanResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 // Tables\Actions\EditAction::make(),
+                
+                Action::make('repayment_schedule')
+                    ->label('Repayment Schedule')
+                    ->icon('heroicon-o-calendar-days')
+                    ->color('success')
+                    ->modalHeading(fn (Loan $record) => 'Repayment Schedule - ' . ($record->loan_number ?? 'Loan'))
+                    ->modalDescription(fn (Loan $record) => 'Borrower: ' . ($record->borrower->full_name ?? 'N/A'))
+                    ->modalWidth(MaxWidth::SevenExtraLarge)
+                    ->modalContent(function (Loan $record) {
+                        $scheduleService = new RepaymentScheduleService();
+                        $scheduleData = $scheduleService->calculateSchedule($record);
+                        $currencyHelper = new CurrencyHelper();
+                        
+                        $summary = $scheduleData['summary'];
+                        $schedule = $scheduleData['schedule'];
+                        $nextPayment = $scheduleData['next_payment'];
+                        
+                        return view('filament.components.repayment-schedule-modal', [
+                            'loan' => $record,
+                            'summary' => $summary,
+                            'schedule' => $schedule,
+                            'nextPayment' => $nextPayment,
+                            'currencyHelper' => $currencyHelper,
+                        ]);
+                    })
+                    ->modalFooterActions(fn (Loan $record): array => [
+                        Action::make('download_pdf')
+                            ->label('Download PDF')
+                            ->icon('heroicon-o-arrow-down-tray')
+                            ->color('primary')
+                            ->url(fn () => route('loan.repayment-schedule.pdf', $record))
+                            ->openUrlInNewTab(),
+                        Action::make('close')
+                            ->label('Close')
+                            ->color('gray')
+                            ->modalHidden()
+                            ->close(),
+                    ]),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
