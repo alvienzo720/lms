@@ -31,6 +31,10 @@ class Loan extends Model
         return $this->belongsTo(Borrower::class, 'borrower_id', 'id');
     }
 
+    public function repayments()
+    {
+        return $this->hasMany(Repayments::class, 'loan_id', 'id');
+    }
 
 
     protected $casts = [

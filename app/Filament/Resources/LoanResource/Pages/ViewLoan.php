@@ -4,9 +4,12 @@ namespace App\Filament\Resources\LoanResource\Pages;
 
 use App\Filament\Resources\LoanResource;
 use App\Services\AICreditScoringService;
+use App\Services\RepaymentScheduleService;
+use App\Helpers\CurrencyHelper;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Support\Enums\MaxWidth;
 
 class ViewLoan extends ViewRecord
 {
@@ -15,6 +18,44 @@ class ViewLoan extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('repaymentSchedule')
+                ->label('View Repayment Schedule')
+                ->icon('heroicon-o-calendar-days')
+                ->color('success')
+                ->modalHeading(fn () => 'Repayment Schedule - ' . ($this->record->loan_number ?? 'Loan'))
+                ->modalDescription(fn () => 'Borrower: ' . ($this->record->borrower->full_name ?? 'N/A'))
+                ->modalWidth(MaxWidth::SevenExtraLarge)
+                ->modalContent(function () {
+                    $scheduleService = new RepaymentScheduleService();
+                    $scheduleData = $scheduleService->calculateSchedule($this->record);
+                    $currencyHelper = new CurrencyHelper();
+                    
+                    $summary = $scheduleData['summary'];
+                    $schedule = $scheduleData['schedule'];
+                    $nextPayment = $scheduleData['next_payment'];
+                    
+                    return view('filament.components.repayment-schedule-modal', [
+                        'loan' => $this->record,
+                        'summary' => $summary,
+                        'schedule' => $schedule,
+                        'nextPayment' => $nextPayment,
+                        'currencyHelper' => $currencyHelper,
+                    ]);
+                })
+                ->modalFooterActions(fn (): array => [
+                    Actions\Action::make('download_pdf')
+                        ->label('Download PDF')
+                        ->icon('heroicon-o-arrow-down-tray')
+                        ->color('primary')
+                        ->url(fn () => route('loan.repayment-schedule.pdf', $this->record))
+                        ->openUrlInNewTab(),
+                    Actions\Action::make('close')
+                        ->label('Close')
+                        ->color('gray')
+                        ->modalHidden()
+                        ->close(),
+                ]),
+                
             Actions\Action::make('aiCreditScore')
                 ->label('Run AI Credit Assessment')
                 ->icon('heroicon-o-cpu-chip')

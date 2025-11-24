@@ -40,4 +40,7 @@ Route::middleware([
 });
 
 Route::get('/statement/{record}', [CustomerStatementController::class, 'download'])->name('statement.download');
+Route::get('/loans/{loan}/repayment-schedule/pdf', [\App\Http\Controllers\RepaymentScheduleController::class, 'downloadPdf'])
+    ->name('loan.repayment-schedule.pdf')
+    ->middleware('auth');
 
