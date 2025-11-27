@@ -18,6 +18,7 @@ use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 use Carbon\Carbon;
 use App\Notifications\LoanStatusNotification;
+use App\Notifications\LoanApprovedNotification;
 
 
 
@@ -297,28 +298,34 @@ if(!is_null($borrower->email)){
     switch ($loanStatus) {
         case 'approved':
             $message .= 'Congratulations! Your loan application of K' . $loan_amount . ' has been approved successfully. The total repayment amount is K' . $loan_repayment_amount . ' to be repaid in ' . $loan_duration . ' ' . $loan_cycle;
+            
+            // Use LoanApprovedNotification with attachment for approved loans
+            $agreementPath = $data['loan_agreement_file_path'] ?? null;
+            $borrower->notify(new LoanApprovedNotification($record, $message, $agreementPath));
             break;
 
         case 'processing':
             $message .= 'Your loan application of K' . $loan_amount . ' is currently under review. We will notify you once the review process is complete.';
+            $borrower->notify(new LoanStatusNotification($message));
             break;
 
         case 'denied':
             $message .= 'We regret to inform you that your loan application of K' . $loan_amount . ' has been rejected.';
+            $borrower->notify(new LoanStatusNotification($message));
             break;
 
         case 'defaulted':
             $message .= 'Unfortunately, your loan is in default status. Please contact us as soon as possible to discuss the situation.';
+            $borrower->notify(new LoanStatusNotification($message));
             break;
 
 
 
         default:
             $message .= 'Your loan application of K' . $loan_amount . ' is in progress. Current status: ' . $loanStatus;
+            $borrower->notify(new LoanStatusNotification($message));
             break;
     }
-
-    $borrower->notify(new LoanStatusNotification($message));
 }
 
 

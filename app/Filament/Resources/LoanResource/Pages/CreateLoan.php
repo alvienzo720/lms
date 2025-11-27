@@ -15,6 +15,7 @@ use Filament\Resources\Pages\CreateRecord;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 use App\Notifications\LoanStatusNotification;
+use App\Notifications\LoanApprovedNotification;
 
 
 
@@ -148,47 +149,7 @@ class CreateLoan extends CreateRecord
                 ->get($url);
         }
 
-// send via Email too if email is not Null
-if(!is_null($borrower->email)){
-    //dd('email is not null');
-    $message = 'Hi ' . $borrower->first_name . ', ';
-    $loan_amount = $data['principal_amount'];
-    $loan_duration = $data['loan_duration'];
-    $loan_release_date = $data['loan_release_date'];
-    $loan_repayment_amount = $data['repayment_amount'];
-    $loan_interest_amount = $data['interest_amount'];
-    $loan_due_date = $data['loan_due_date'];
-    $loan_number = $data['loan_number'];
-
-    // Assuming $data['loan_status'] contains the current status
-    $loanStatus = $data['loan_status'];
-
-    switch ($loanStatus) {
-        case 'approved':
-            $message .= 'Congratulations! Your loan application of K' . $loan_amount . ' has been approved successfully. The total repayment amount is K' . $loan_repayment_amount . ' to be repaid in ' . $loan_duration . ' ' . $loan_cycle;
-            break;
-
-        case 'processing':
-            $message .= 'Your loan application of K' . $loan_amount . ' is currently under review. We will notify you once the review process is complete.';
-            break;
-
-        case 'denied':
-            $message .= 'We regret to inform you that your loan application of K' . $loan_amount . ' has been rejected.';
-            break;
-
-        case 'defaulted':
-            $message .= 'Unfortunately, your loan is in default status. Please contact us as soon as possible to discuss the situation.';
-            break;
-
-
-
-        default:
-            $message .= 'Your loan application of K' . $loan_amount . ' is in progress. Current status: ' . $loanStatus;
-            break;
-    }
-
-   $borrower->notify(new LoanStatusNotification($message));
-}
+// Email notification will be sent after loan creation in afterCreate hook
 
 
         // Check if the loan is being approved and they want to compile the Loan Agreement Form
@@ -318,6 +279,52 @@ $this->halt();
         return $data;
     }
 
+
+    protected function afterCreate(): void
+    {
+        $loan = $this->record;
+        $borrower = $loan->borrower;
+        
+        // Send email notification if borrower has an email
+        if (!is_null($borrower->email)) {
+            $loan_cycle = $loan->loan_type->interest_cycle ?? '';
+            $message = 'Hi ' . $borrower->first_name . ', ';
+            $loan_amount = $loan->principal_amount;
+            $loan_duration = $loan->loan_duration;
+            $loan_repayment_amount = $loan->repayment_amount;
+            $loanStatus = $loan->loan_status;
+
+            switch ($loanStatus) {
+                case 'approved':
+                    $message .= 'Congratulations! Your loan application of K' . $loan_amount . ' has been approved successfully. The total repayment amount is K' . $loan_repayment_amount . ' to be repaid in ' . $loan_duration . ' ' . $loan_cycle;
+                    
+                    // Use LoanApprovedNotification with attachment for approved loans
+                    $agreementPath = $loan->loan_agreement_file_path ?? null;
+                    $borrower->notify(new LoanApprovedNotification($loan, $message, $agreementPath));
+                    break;
+
+                case 'processing':
+                    $message .= 'Your loan application of K' . $loan_amount . ' is currently under review. We will notify you once the review process is complete.';
+                    $borrower->notify(new LoanStatusNotification($message));
+                    break;
+
+                case 'denied':
+                    $message .= 'We regret to inform you that your loan application of K' . $loan_amount . ' has been rejected.';
+                    $borrower->notify(new LoanStatusNotification($message));
+                    break;
+
+                case 'defaulted':
+                    $message .= 'Unfortunately, your loan is in default status. Please contact us as soon as possible to discuss the situation.';
+                    $borrower->notify(new LoanStatusNotification($message));
+                    break;
+
+                default:
+                    $message .= 'Your loan application of K' . $loan_amount . ' is in progress. Current status: ' . $loanStatus;
+                    $borrower->notify(new LoanStatusNotification($message));
+                    break;
+            }
+        }
+    }
 
        protected function getRedirectUrl(): string
     {
