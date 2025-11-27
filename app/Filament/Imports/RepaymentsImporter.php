@@ -21,6 +21,8 @@ use Ramsey\Uuid\Uuid;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use App\Notifications\LoanStatusNotification;
+use App\Notifications\PaymentReceiptNotification;
+use App\Services\PaymentReceiptPDF;
 use Carbon\Carbon;
 
 class RepaymentsImporter extends Importer
@@ -295,7 +297,23 @@ class RepaymentsImporter extends Importer
                 number_format($repaymentAmount, 2) . '. Your updated balance is K' .
                 number_format($loan->balance, 2) . '. Thank you for your payment.';
 
-            $borrower->notify(new LoanStatusNotification($message));
+            // Get the repayment record to generate receipt
+            $repayment = Repayments::where('loan_id', $loan->id)
+                ->latest()
+                ->first();
+            
+            $receiptPath = null;
+            
+            if ($repayment) {
+                // Generate payment receipt PDF
+                $receiptService = new PaymentReceiptPDF();
+                $receiptPath = $receiptService->generate($repayment);
+                
+                Log::info('Receipt generated at: ' . $receiptPath . ' for loan ' . $loan->loan_number);
+            }
+
+            // Use PaymentReceiptNotification with attachment
+            $borrower->notify(new PaymentReceiptNotification($repayment, $loan, $message, $receiptPath));
 
             Log::info('Email notification sent to ' . $borrower->email . ' for loan ' . $loan->loan_number);
         } catch (\Exception $e) {

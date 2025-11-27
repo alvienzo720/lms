@@ -18,6 +18,8 @@ use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 use App\Models\Loan;
 use App\Notifications\LoanStatusNotification;
+use App\Notifications\PaymentReceiptNotification;
+use App\Services\PaymentReceiptPDF;
 use App\Models\ThirdParty;
 use Illuminate\Support\Facades\Http;
 
@@ -263,7 +265,23 @@ class CreateRepayments extends CreateRecord
                 number_format($repaymentAmount, 2) . '. Your updated balance is K' .
                 number_format($loan->balance, 2) . '. Thank you for your payment.';
 
-            $borrower->notify(new LoanStatusNotification($message));
+            // Get the repayment record to generate receipt
+            $repayment = Repayments::where('loan_id', $loan->id)
+                ->latest()
+                ->first();
+            
+            $receiptPath = null;
+            
+            if ($repayment) {
+                // Generate payment receipt PDF
+                $receiptService = new PaymentReceiptPDF();
+                $receiptPath = $receiptService->generate($repayment);
+                
+                Log::info('Receipt generated at: ' . $receiptPath);
+            }
+
+            // Use PaymentReceiptNotification with attachment
+            $borrower->notify(new PaymentReceiptNotification($repayment, $loan, $message, $receiptPath));
             
             Log::info('Email notification sent to ' . $borrower->email);
         } catch (\Exception $e) {

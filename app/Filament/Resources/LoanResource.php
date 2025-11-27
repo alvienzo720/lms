@@ -428,6 +428,7 @@ class LoanResource extends Resource
                     ->modalHeading(fn (Loan $record) => 'Repayment Schedule - ' . ($record->loan_number ?? 'Loan'))
                     ->modalDescription(fn (Loan $record) => 'Borrower: ' . ($record->borrower->full_name ?? 'N/A'))
                     ->modalWidth(MaxWidth::SevenExtraLarge)
+                    ->modalSubmitAction(false) // Disable form submission to prevent caching
                     ->modalContent(function (Loan $record) {
                         $scheduleService = new RepaymentScheduleService();
                         $scheduleData = $scheduleService->calculateSchedule($record);
